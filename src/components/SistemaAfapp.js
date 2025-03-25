@@ -14,9 +14,8 @@ import {
 
 const SistemaApp = () => {
   // Estado con persistencia en localStorage
-  const [cursos, setCursos, loadingCursos] = useStorage('cursos', cursosIniciales);
-  const [grupos, setGrupos, loadingGrupos] = useStorage('grupos', gruposIniciales);
-  // Eliminamos la variable isLoading que no se usa
+  const [cursos, setCursos, _loadingCursos] = useStorage('cursos', cursosIniciales);
+  const [grupos, setGrupos, _loadingGrupos] = useStorage('grupos', gruposIniciales);
   
   // Función para obtener meses únicos de los cursos
   const obtenerMesesUnicos = (cursos) => {
@@ -59,8 +58,6 @@ const SistemaApp = () => {
   const [cursoParaEditar, setCursoParaEditar] = useState(null);
   const [grupoParaEditar, setGrupoParaEditar] = useState(null);
 
-  // Eliminamos la función formatearPeriodo ya que no se utiliza
-
   // Función para cambiar el periodo
   const cambiarPeriodo = (e) => {
     const valor = e.target.value.split('-');
@@ -94,9 +91,9 @@ const filtrarCursosPorFecha = (cursos) => {
   });
 };
 
-  // Aplicar filtros (agregando las dependencias faltantes)
-  const cursosFiltrados = useMemo(() => filtrarCursosPorFecha(cursos), [cursos, periodo, filtrarCursosPorFecha]);
-  const gruposFiltrados = useMemo(() => filtrarGruposPorFecha(grupos), [grupos, periodo, filtrarGruposPorFecha]);
+  // Aplicar filtros (corrigiendo las dependencias)
+  const cursosFiltrados = useMemo(() => filtrarCursosPorFecha(cursos), [cursos, periodo]);
+  const gruposFiltrados = useMemo(() => filtrarGruposPorFecha(grupos), [grupos, periodo]);
 
   // Calcular estadísticas generales basadas en grupos filtrados
   const { totalGrupos, totalMiembros, crecimientoTotal } = calcularEstadisticas(gruposFiltrados);
@@ -213,8 +210,6 @@ const filtrarCursosPorFecha = (cursos) => {
     setGrupoSeleccionado(grupo);
     setModalActivo('detalleGrupo');
   };
-
-  // Eliminamos la función obtenerFechaActual ya que no se utiliza
 
   return (
     <div className="flex flex-col min-h-screen bg-gray-100">
