@@ -1,115 +1,133 @@
 // db.js
 const mysql = require('mysql2/promise');
+require('dotenv').config(); // Asegura la carga de variables de entorno
 
-// Configuración con variables de entorno de Railway y fallback para desarrollo local
+// Configuración robusta de conexión para producción
 const pool = mysql.createPool({
-  // Prioriza las variables de Railway, luego las genéricas, y por último valores locales
-  host: process.env.MYSQLHOST || process.env.DB_HOST || 'localhost',
-  port: process.env.MYSQLPORT || process.env.DB_PORT || 3306,
-  user: process.env.MYSQLUSER || process.env.DB_USER || 'root',
-  password: process.env.MYSQLPASSWORD || process.env.DB_PASSWORD || 'Lukasadrian1998/@',
-  database: process.env.MYSQLDATABASE || process.env.DB_DATABASE || 'seguimiento_grupos',
+  host: 'mysql.railway.internal', // Host interno de MySQL proporcionado por Railway
+  port: 3306, // Puerto estándar de MySQL
+  user: 'root', // Usuario de MySQL
+  password: 'ViXaykuYrGPCEVgKZbUTfIdUdIeLbXec', // Contraseña segura desde variables de entorno
+  database: 'railway', // Nombre de la base de datos
   
-  // Configuración de SSL para entornos de producción
+  // Configuración de conexión mejorada
+  connectionLimit: 10, // Tamaño del pool de conexiones
+  waitForConnections: true, // Esperar conexiones disponibles
+  queueLimit: 0, // Cola sin límite
+  
+  // Configuración SSL para conexiones seguras
   ...(process.env.NODE_ENV === 'production' ? {
     ssl: {
-      rejectUnauthorized: false // Cambiado a false para mayor compatibilidad con Railway
+      rejectUnauthorized: false // Permitir certificados autofirmados en Railway
     }
-  } : {}),
-  
-  waitForConnections: true,
-  connectionLimit: 10,
-  queueLimit: 0
+  } : {})
 });
 
-// Función para inicializar la base de datos con mejor manejo de errores
+// Función integral para inicializar la base de datos
 async function initializeDatabase() {
-  try {
-    console.log('Intentando conectar a la base de datos en:', process.env.MYSQLHOST || process.env.DB_HOST || 'localhost');
-    
-    // Probar la conexión primero
-    await testConnection();
-    
-    // Crear tabla de cursos si no existe
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS cursos (
-        id VARCHAR(255) PRIMARY KEY,
-        nombre VARCHAR(255) NOT NULL,
-        fechaCreacion DATE NOT NULL
-      )
-    `);
-    
-    // Crear tabla de grupos
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS grupos (
-        id VARCHAR(255) PRIMARY KEY,
-        nombre VARCHAR(255) NOT NULL,
-        cursoId VARCHAR(255) NOT NULL,
-        curso VARCHAR(255) NOT NULL,
-        fechaCreacion DATE NOT NULL,
-        miembrosActuales INT NOT NULL,
-        FOREIGN KEY (cursoId) REFERENCES cursos(id) ON DELETE CASCADE
-      )
-    `);
-    
-    // Crear tabla de historial de grupos
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS historial_grupos (
-        id INT AUTO_INCREMENT PRIMARY KEY,
-        grupoId VARCHAR(255) NOT NULL,
-        fecha DATE NOT NULL,
-        miembros INT NOT NULL,
-        observaciones TEXT,
-        FOREIGN KEY (grupoId) REFERENCES grupos(id) ON DELETE CASCADE
-      )
-    `);
-    
-    console.log('Base de datos inicializada correctamente');
-    return true;
-  } catch (error) {
-    console.error('Error inicializando la base de datos:', error);
-    // No lanzamos el error para evitar que la aplicación falle completamente
-    // en caso de problemas con la base de datos
-    return false;
-  }
-}
-
-// Función para verificar la conexión con mejor manejo de errores
-async function testConnection() {
   let connection;
   try {
+    console.log('🚀 Iniciando conexión a la base de datos');
+    console.log('📍 Detalles de conexión:');
+    console.log('Host:', 'mysql.railway.internal');
+    console.log('Base de datos:', 'railway');
+
+    // Establecer y probar conexión
     connection = await pool.getConnection();
-    console.log('Conexión a la base de datos establecida correctamente');
+    console.log('✅ Conexión a base de datos exitosa');
+
+    // Crear tablas con registro detallado
+    await crearTablas(connection);
+
+    console.log('🎉 Inicialización de base de datos completada');
     return true;
   } catch (error) {
-    console.error('Error al conectar con la base de datos:', error);
-    // Registramos información adicional para depuración
-    console.error('Variables de entorno de conexión:');
-    console.error('Host:', process.env.MYSQLHOST || process.env.DB_HOST || 'localhost');
-    console.error('Puerto:', process.env.MYSQLPORT || process.env.DB_PORT || 3306);
-    console.error('Usuario:', process.env.MYSQLUSER || process.env.DB_USER || 'root');
-    console.error('Base de datos:', process.env.MYSQLDATABASE || process.env.DB_DATABASE || 'seguimiento_grupos');
-    // No lanzamos el error para permitir que la aplicación siga funcionando
+    console.error('❌ Error en inicialización de base de datos:', error);
+    
+    // Registro detallado de errores
+    console.error('Detalles del error:');
+    console.error('Nombre:', error.name);
+    console.error('Mensaje:', error.message);
+    console.error('Código:', error.code);
+    
     return false;
   } finally {
     if (connection) connection.release();
   }
 }
 
-// Función para ejecutar consultas con mejor manejo de errores
-async function query(sql, params) {
+// Función separada para crear tablas (modularidad)
+async function crearTablas(connection) {
+  console.log('🛠️ Creando tablas...');
+
+  // Tabla de cursos
+  await connection.query(`
+    CREATE TABLE IF NOT EXISTS cursos (
+      id VARCHAR(255) PRIMARY KEY,
+      nombre VARCHAR(255) NOT NULL,
+      fechaCreacion DATE NOT NULL
+    )
+  `);
+  console.log('✓ Tabla de cursos creada/verificada');
+
+  // Tabla de grupos
+  await connection.query(`
+    CREATE TABLE IF NOT EXISTS grupos (
+      id VARCHAR(255) PRIMARY KEY,
+      nombre VARCHAR(255) NOT NULL,
+      cursoId VARCHAR(255) NOT NULL,
+      curso VARCHAR(255) NOT NULL,
+      fechaCreacion DATE NOT NULL,
+      miembrosActuales INT NOT NULL,
+      FOREIGN KEY (cursoId) REFERENCES cursos(id) ON DELETE CASCADE
+    )
+  `);
+  console.log('✓ Tabla de grupos creada/verificada');
+
+  // Tabla de historial de grupos
+  await connection.query(`
+    CREATE TABLE IF NOT EXISTS historial_grupos (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      grupoId VARCHAR(255) NOT NULL,
+      fecha DATE NOT NULL,
+      miembros INT NOT NULL,
+      observaciones TEXT,
+      FOREIGN KEY (grupoId) REFERENCES grupos(id) ON DELETE CASCADE
+    )
+  `);
+  console.log('✓ Tabla de historial de grupos creada/verificada');
+}
+
+// Función robusta para probar la conexión
+async function testConnection() {
+  try {
+    const connection = await pool.getConnection();
+    console.log('🔗 Prueba de conexión a base de datos exitosa');
+    connection.release();
+    return true;
+  } catch (error) {
+    console.error('🚨 Prueba de conexión a base de datos fallida:', error);
+    console.error('Detalles de conexión:');
+    console.error('Host:', 'mysql.railway.internal');
+    console.error('Base de datos:', 'railway');
+    return false;
+  }
+}
+
+// Función flexible para ejecutar consultas
+async function query(sql, params = []) {
   try {
     const [results] = await pool.execute(sql, params);
     return results;
   } catch (error) {
-    console.error('Error ejecutando consulta:', error);
+    console.error('❌ Error al ejecutar consulta:', error);
     console.error('SQL:', sql);
-    console.error('Parámetros:', JSON.stringify(params));
-    throw error; // En este caso sí lanzamos el error para que la capa superior lo maneje
+    console.error('Parámetros:', params);
+    throw error; // Relanzar para manejo en capa superior
   }
 }
 
-// Exportar funciones y objetos
+// Exportar funciones y pool de conexiones
 module.exports = {
   pool,
   initializeDatabase,
