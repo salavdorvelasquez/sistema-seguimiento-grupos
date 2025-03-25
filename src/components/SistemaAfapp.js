@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { ChevronDown, Eye, Edit, Trash2, ArrowUp, ArrowDown, Calendar, Plus } from 'lucide-react';
+import { ChevronDown, Eye, Edit, Trash2, ArrowUp, ArrowDown, Plus } from 'lucide-react';
 import { CursoForm, GrupoForm, RegistroForm, DetalleGrupoModal } from './modals/ModalForms';
 import useStorage from '../hooks/useStorage';
 import { cursosIniciales, gruposIniciales } from '../data/initialData';
@@ -16,7 +16,7 @@ const SistemaApp = () => {
   // Estado con persistencia en localStorage
   const [cursos, setCursos, loadingCursos] = useStorage('cursos', cursosIniciales);
   const [grupos, setGrupos, loadingGrupos] = useStorage('grupos', gruposIniciales);
-  const isLoading = loadingCursos || loadingGrupos;
+  // Eliminamos la variable isLoading que no se usa
   
   // Función para obtener meses únicos de los cursos
   const obtenerMesesUnicos = (cursos) => {
@@ -59,12 +59,7 @@ const SistemaApp = () => {
   const [cursoParaEditar, setCursoParaEditar] = useState(null);
   const [grupoParaEditar, setGrupoParaEditar] = useState(null);
 
-  // Función para formatear el período
-  const formatearPeriodo = (periodo) => {
-    const meses = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 
-                   'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
-    return `${meses[periodo.month - 1]} de ${periodo.year}`;
-  };
+  // Eliminamos la función formatearPeriodo ya que no se utiliza
 
   // Función para cambiar el periodo
   const cambiarPeriodo = (e) => {
@@ -99,9 +94,9 @@ const filtrarCursosPorFecha = (cursos) => {
   });
 };
 
-  // Aplicar filtros
-  const cursosFiltrados = useMemo(() => filtrarCursosPorFecha(cursos), [cursos, periodo]);
-  const gruposFiltrados = useMemo(() => filtrarGruposPorFecha(grupos), [grupos, periodo]);
+  // Aplicar filtros (agregando las dependencias faltantes)
+  const cursosFiltrados = useMemo(() => filtrarCursosPorFecha(cursos), [cursos, periodo, filtrarCursosPorFecha]);
+  const gruposFiltrados = useMemo(() => filtrarGruposPorFecha(grupos), [grupos, periodo, filtrarGruposPorFecha]);
 
   // Calcular estadísticas generales basadas en grupos filtrados
   const { totalGrupos, totalMiembros, crecimientoTotal } = calcularEstadisticas(gruposFiltrados);
@@ -219,13 +214,7 @@ const filtrarCursosPorFecha = (cursos) => {
     setModalActivo('detalleGrupo');
   };
 
-  // Obtener fecha actual formateada
-  const obtenerFechaActual = () => {
-    const fecha = new Date();
-    const mes = fecha.toLocaleString('es', { month: 'long' });
-    const año = fecha.getFullYear();
-    return `${mes.charAt(0).toUpperCase() + mes.slice(1)} de ${año}`;
-  };
+  // Eliminamos la función obtenerFechaActual ya que no se utiliza
 
   return (
     <div className="flex flex-col min-h-screen bg-gray-100">
