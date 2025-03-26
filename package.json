@@ -17,14 +17,14 @@
     "recharts": "^2.15.1",
     "web-vitals": "^2.1.4"
   },
-  "scripts": {
-    "start": "node server/server.js",
-    "client": "react-scripts start",
-    "build": "CI=false react-scripts build",
-    "test": "react-scripts test",
-    "eject": "react-scripts eject",
-    "dev": "react-scripts start"
-  },
+"scripts": {
+  "start": "node server/server.js",
+  "client": "react-scripts start",
+  "build": "CI=false react-scripts build && echo '✅ Construcción React completada'",
+  "test": "react-scripts test",
+  "eject": "react-scripts eject",
+  "dev": "react-scripts start"
+},
   "eslintConfig": {
     "extends": [
       "react-app",
