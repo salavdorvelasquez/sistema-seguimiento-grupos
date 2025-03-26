@@ -2,7 +2,6 @@
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
-const fs = require('fs');
 const { initializeDatabase } = require('./db');
 const cursosRoutes = require('./routes/cursos');
 const gruposRoutes = require('./routes/grupos');
@@ -10,16 +9,19 @@ const app = express();
 const PORT = process.env.PORT || 3001;
 
 // Logs de diagnóstico al inicio
-console.log('======== INICIANDO SERVIDOR ========');
+console.log('======== INICIANDO SERVIDOR API ========');
 console.log('Directorio actual:', __dirname);
 console.log('Puerto configurado:', PORT);
-console.log('Variables de entorno disponibles:', Object.keys(process.env)
-  .filter(key => !key.includes('PASSWORD'))
-  .join(', '));
 console.log('====================================');
 
-// Middleware
-app.use(cors());
+// Configuración CORS mejorada para permitir peticiones desde Vercel
+app.use(cors({
+  // Permitir peticiones desde localhost y desde el dominio de Vercel
+  origin: ['http://localhost:3000', 'https://sistema-seguimiento-grupos.vercel.app'],
+  methods: ['GET', 'POST', 'PUT', 'DELETE'],
+  credentials: true
+}));
+
 app.use(express.json());
 
 // Middleware para el registro de todas las solicitudes
@@ -28,10 +30,9 @@ app.use((req, res, next) => {
   next();
 });
 
-// Ruta de healthcheck mejorada
+// Ruta de healthcheck
 app.get('/health', (req, res) => {
   console.log('Healthcheck solicitado desde:', req.ip);
-  console.log('Headers:', JSON.stringify(req.headers));
   res.status(200).send('OK');
 });
 
@@ -50,14 +51,51 @@ app.get('/api/status', async (req, res) => {
   }
 });
 
-// Ruta para forzar la inicialización de la base de datos
+// Ruta para inicializar la base de datos y crear datos de prueba
 app.get('/init-db', async (req, res) => {
   try {
-    console.log('Iniciando creación de tablas manualmente...');
+    console.log('Iniciando creación de tablas e inicialización de datos...');
     const result = await initializeDatabase();
+    
+    // Después de crear las tablas, verificamos si están vacías e insertamos datos de prueba
     if (result) {
+      try {
+        const mysql = require('mysql2/promise');
+        const connection = await mysql.createConnection({
+          host: process.env.MYSQLHOST || 'localhost',
+          user: process.env.MYSQLUSER || 'root',
+          password: process.env.MYSQLPASSWORD || '',
+          database: process.env.MYSQLDATABASE || 'railway'
+        });
+
+        // Verificar si la tabla cursos está vacía
+        const [cursoCount] = await connection.execute('SELECT COUNT(*) as count FROM cursos');
+        if (cursoCount[0].count === 0) {
+          console.log('Insertando datos de prueba en la tabla cursos...');
+          await connection.execute(
+            'INSERT INTO cursos (nombre) VALUES (?), (?), (?), (?), (?)',
+            ['REVIT EN ESTRUCTURAS', 'ARQUITECTURA', 'LICENCIA', 'AUTOCAD', 'CIVIL']
+          );
+        }
+
+        // Verificar si la tabla grupos está vacía
+        const [grupoCount] = await connection.execute('SELECT COUNT(*) as count FROM grupos');
+        if (grupoCount[0].count === 0) {
+          console.log('Insertando datos de prueba en la tabla grupos...');
+          await connection.execute(
+            'INSERT INTO grupos (nombre, cursoId, curso, fechaCreacion, miembrosActuales) VALUES (?, ?, ?, ?, ?), (?, ?, ?, ?, ?)',
+            ['G51', 1, 'REVIT EN ESTRUCTURAS', '2025-03-15', 131, 'G50', 1, 'REVIT EN ESTRUCTURAS', '2025-03-24', 20]
+          );
+        }
+
+        await connection.end();
+        console.log('✅ Datos de prueba insertados correctamente');
+      } catch (dbError) {
+        console.error('Error al insertar datos de prueba:', dbError);
+      }
+      
       console.log('✅ Tablas creadas correctamente');
-      res.status(200).send('Base de datos inicializada correctamente. Tablas creadas.');
+      res.status(200).send('Base de datos inicializada correctamente. Tablas creadas y datos de prueba insertados.');
     } else {
       console.log('⚠️ Problema al crear tablas');
       res.status(500).send('Error al inicializar la base de datos');
@@ -70,135 +108,19 @@ app.get('/init-db', async (req, res) => {
 
 // Rutas API
 app.get('/api', (req, res) => {
-  res.status(200).send('API en funcionamiento. Accede a /health para el healthcheck.');
+  res.status(200).json({
+    message: 'API del Sistema de Seguimiento de Grupos en funcionamiento',
+    endpoints: {
+      status: '/api/status',
+      cursos: '/api/cursos',
+      grupos: '/api/grupos'
+    },
+    documentacion: 'Para inicializar la base de datos, visita /init-db'
+  });
 });
+
 app.use('/api/cursos', cursosRoutes);
 app.use('/api/grupos', gruposRoutes);
-
-// Verificación de carpetas y archivos disponibles
-console.log('🔍 Listando contenido del directorio actual:', fs.readdirSync(__dirname));
-console.log('🔍 Listando contenido del directorio raíz:', fs.readdirSync(path.resolve(__dirname, '..')));
-
-// Búsqueda avanzada de archivos estáticos
-try {
-  const possibleBuildPaths = [
-    path.resolve(__dirname, '../build'),
-    path.resolve(__dirname, '../client/build'),
-    path.resolve(__dirname, '../public'),
-    path.resolve(__dirname, '../src/build')
-  ];
-  
-  let buildPathFound = null;
-  
-  // Buscar la carpeta build o public en posibles ubicaciones
-  for (const buildPath of possibleBuildPaths) {
-    if (fs.existsSync(buildPath)) {
-      console.log(`✅ Encontrada carpeta con archivos estáticos en: ${buildPath}`);
-      console.log(`📂 Contenido: ${fs.readdirSync(buildPath).join(', ')}`);
-      buildPathFound = buildPath;
-      break;
-    } else {
-      console.log(`⚠️ No se encontró carpeta en: ${buildPath}`);
-    }
-  }
-  
-  if (buildPathFound) {
-    console.log(`🚀 Usando carpeta ${buildPathFound} para archivos estáticos`);
-    
-    // Servir archivos estáticos desde la carpeta encontrada
-    app.use(express.static(buildPathFound));
-    
-    // Verificar si existe index.html
-    const indexPath = path.join(buildPathFound, 'index.html');
-    if (fs.existsSync(indexPath)) {
-      console.log(`✅ Archivo index.html encontrado en ${indexPath}`);
-      
-      // Ruta catch-all para React (excepto rutas API)
-      app.get('*', (req, res, next) => {
-        if (req.url.startsWith('/api') || req.url === '/health' || req.url === '/init-db') {
-          // Continuar al siguiente middleware si es una ruta de API
-          return next();
-        }
-        console.log(`📄 Sirviendo index.html para ruta: ${req.url}`);
-        res.sendFile(indexPath);
-      });
-    } else {
-      console.error(`❌ No se encontró index.html en ${buildPathFound}`);
-      // Implementar solución alternativa de interfaz
-      implementarInterfazAlternativa(app);
-    }
-  } else {
-    console.error('❌ No se encontró ninguna carpeta con archivos estáticos');
-    // Implementar solución alternativa de interfaz
-    implementarInterfazAlternativa(app);
-  }
-} catch (error) {
-  console.error('Error al verificar directorios:', error);
-  // Implementar solución alternativa de interfaz
-  implementarInterfazAlternativa(app);
-}
-
-// Función para implementar la interfaz alternativa si no se encuentran archivos estáticos
-function implementarInterfazAlternativa(app) {
-  app.get('/', (req, res) => {
-    res.send(`
-      <html>
-        <head>
-          <title>Sistema de Seguimiento de Grupos</title>
-          <style>
-            body { font-family: Arial, sans-serif; line-height: 1.6; padding: 20px; max-width: 800px; margin: 0 auto; }
-            h1 { color: #333; border-bottom: 2px solid #eee; padding-bottom: 10px; }
-            .card { border: 1px solid #ddd; border-radius: 8px; padding: 15px; margin-bottom: 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
-            .success { color: green; }
-            .error { color: red; }
-            .info { color: #0066cc; }
-            a { color: #0066cc; text-decoration: none; }
-            a:hover { text-decoration: underline; }
-            button { background: #0066cc; color: white; border: none; padding: 8px 15px; border-radius: 4px; cursor: pointer; }
-            button:hover { background: #0055aa; }
-            pre { background: #f5f5f5; padding: 10px; border-radius: 4px; overflow-x: auto; }
-          </style>
-        </head>
-        <body>
-          <h1>Sistema de Seguimiento de Grupos</h1>
-          <div class="card">
-            <h2>Estado del Servidor</h2>
-            <p class="success">✅ API funcionando correctamente</p>
-            <p>La API está funcionando correctamente, pero la interfaz de usuario no está disponible en este momento.</p>
-            <p class="info">Este es un mensaje temporal mientras se resuelven problemas con los archivos estáticos de React.</p>
-          </div>
-          
-          <div class="card">
-            <h2>Acceso a la API</h2>
-            <p>Puedes acceder a la API directamente en las siguientes rutas:</p>
-            <ul>
-              <li><a href="/api/status">/api/status</a> - Estado del servidor</li>
-              <li><a href="/api/cursos">/api/cursos</a> - Lista de cursos</li>
-              <li><a href="/api/grupos">/api/grupos</a> - Lista de grupos</li>
-              <li><a href="/init-db">/init-db</a> - Inicializar base de datos</li>
-            </ul>
-          </div>
-          
-          <div class="card">
-            <h2>Información de Diagnóstico</h2>
-            <p>Directorio del servidor: ${__dirname}</p>
-            <p>Directorio raíz: ${path.resolve(__dirname, '..')}</p>
-            <p>Archivos en el directorio raíz: ${fs.readdirSync(path.resolve(__dirname, '..')).join(', ')}</p>
-          </div>
-        </body>
-      </html>
-    `);
-  });
-  
-  // Ruta catch-all para otras rutas no API
-  app.get('*', (req, res, next) => {
-    if (req.url.startsWith('/api') || req.url === '/health' || req.url === '/init-db') {
-      // Continuar al siguiente middleware si es una ruta de API
-      return next();
-    }
-    res.redirect('/');
-  });
-}
 
 // Manejador global de errores
 app.use((err, req, res, next) => {
@@ -208,7 +130,7 @@ app.use((err, req, res, next) => {
 
 // Iniciar servidor
 app.listen(PORT, '0.0.0.0', () => {
-  console.log(`Servidor API corriendo en puerto ${PORT} en todas las interfaces de red`);
+  console.log(`API corriendo en puerto ${PORT} en todas las interfaces de red`);
   console.log(`Healthcheck disponible en: http://0.0.0.0:${PORT}/health`);
 });
 
