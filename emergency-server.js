@@ -7,6 +7,7 @@ const PORT = process.env.PORT || 3000;
 console.log('==== SERVIDOR DE EMERGENCIA INICIANDO ====');
 console.log('Puerto configurado:', PORT);
 console.log('Fecha y hora:', new Date().toISOString());
+console.log('Variable de entorno PORT:', process.env.PORT);
 
 // Ruta de healthcheck
 app.get('/health', (req, res) => {
