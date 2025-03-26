@@ -8,7 +8,8 @@
     "mysql2": "^3.6.0"
   },
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "build": "echo 'Build process complete'"
   },
   "engines": {
     "node": ">=16.0.0"
