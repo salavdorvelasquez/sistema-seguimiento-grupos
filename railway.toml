@@ -1,5 +1,4 @@
 [deploy]
-startCommand = "node emergency-server.js"
 healthcheckPath = "/health"
-healthcheckTimeout = 10
-restartPolicyType = "ON_FAILURE"
+healthcheckTimeout = 120
+startupTimeout = 180
