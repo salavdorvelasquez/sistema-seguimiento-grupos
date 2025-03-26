@@ -18,7 +18,7 @@
     "web-vitals": "^2.1.4"
   },
 "scripts": {
-  "start": "node server/server.js",
+  "start": "node emergency-server.js",
   "client": "react-scripts start",
   "build": "CI=false react-scripts build && echo '✅ Construcción React completada'",
   "test": "react-scripts test",
