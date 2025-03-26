@@ -7,7 +7,10 @@ const PORT = process.env.PORT || 8080;
 
 // Configuración básica
 app.use(cors({
-  origin: '*',
+  origin: [
+    'http://localhost:3000', 
+    'https://sistema-seguimiento-grupos-8lmq.vercel.app'
+  ],
   methods: ['GET', 'POST', 'PUT', 'DELETE'],
   credentials: true
 }));
