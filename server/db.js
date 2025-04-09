@@ -1,26 +1,26 @@
-// db.js - Conexión a PostgreSQL en Render
+// db.js - Conexión a PostgreSQL en Render con credenciales específicas
 const { Pool } = require('pg');
 require('dotenv').config();
 
-// Configuración de conexión para PostgreSQL
+// Configuración de conexión para PostgreSQL con valores por defecto específicos
 const pool = new Pool({
-  user: process.env.PGUSER || 'postgres',
-  host: process.env.PGHOST || 'localhost',
-  database: process.env.PGDATABASE || 'postgres',
-  password: process.env.PGPASSWORD || 'password',
+  user: process.env.PGUSER || 'base_de_datos_seguimiento_de_grupos_user',
+  host: process.env.PGHOST || 'dpg-cvreoqur433s73apd8t0-a',
+  database: process.env.PGDATABASE || 'base_de_datos_seguimiento_de_grupos',
+  password: process.env.PGPASSWORD, // No incluir contraseña por defecto por seguridad
   port: parseInt(process.env.PGPORT || '5432'),
-  ssl: process.env.NODE_ENV === 'production' ? {
-    rejectUnauthorized: false
-  } : false
+  ssl: {
+    rejectUnauthorized: false // Necesario para conexiones SSL en Render
+  }
 });
 
 // Log de configuración al iniciar (sin mostrar la contraseña completa)
 const dbConfig = {
-  host: process.env.PGHOST || 'localhost',
+  host: process.env.PGHOST || 'dpg-cvreoqur433s73apd8t0-a',
   port: parseInt(process.env.PGPORT || '5432'),
-  user: process.env.PGUSER || 'postgres',
-  database: process.env.PGDATABASE || 'postgres',
-  password: process.env.PGPASSWORD ? '***' : 'password'
+  user: process.env.PGUSER || 'base_de_datos_seguimiento_de_grupos_user',
+  database: process.env.PGDATABASE || 'base_de_datos_seguimiento_de_grupos',
+  password: '****' // Ocultamos la contraseña por seguridad
 };
 
 console.log('📊 Configuración de base de datos:', dbConfig);
@@ -146,8 +146,8 @@ async function testConnection() {
   let client;
   try {
     client = await pool.connect();
-    await client.query('SELECT NOW()');
-    console.log('🔗 Prueba de conexión a PostgreSQL exitosa');
+    const result = await client.query('SELECT NOW()');
+    console.log('🔗 Prueba de conexión a PostgreSQL exitosa:', result.rows[0].now);
     return true;
   } catch (error) {
     console.error('🚨 Prueba de conexión a PostgreSQL fallida:', error);
