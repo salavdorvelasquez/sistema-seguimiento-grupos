@@ -1,25 +1,26 @@
-// server.js - Archivo corregido para usar db.js de manera consistente
+// server.js - Adaptado para PostgreSQL en Render
 const express = require('express');
 const cors = require('cors');
 require('dotenv').config();
 const app = express();
 const PORT = process.env.PORT || 8080;
 
-// Importar el módulo de base de datos corregido
+// Importar el módulo de base de datos PostgreSQL
 const db = require('./db');
 
 // Configuración básica
 app.use(cors({
   origin: [
     'http://localhost:3000', 
-    'https://sistema-seguimiento-grupos-8lmq.vercel.app'
+    'https://sistema-seguimiento-grupos-8lmq.vercel.app',
+    'https://sistema-seguimiento-grupos-frontend.onrender.com'
   ],
   methods: ['GET', 'POST', 'PUT', 'DELETE'],
   credentials: true
 }));
 app.use(express.json());
 
-// Ruta de health check para Railway
+// Ruta de health check para Render
 app.get('/health', (req, res) => {
   res.status(200).send('OK');
 });
@@ -44,6 +45,7 @@ app.get('/', (req, res) => {
         <div class="card">
           <h2>Estado: <span class="success">En línea</span></h2>
           <p>Timestamp: ${new Date().toISOString()}</p>
+          <p>Base de datos: PostgreSQL</p>
         </div>
         <div class="card">
           <h2>Endpoints disponibles:</h2>
@@ -52,7 +54,10 @@ app.get('/', (req, res) => {
           <div class="endpoint">POST /api/cursos</div>
           <div class="endpoint">GET /api/grupos</div>
           <div class="endpoint">POST /api/grupos</div>
+          <div class="endpoint">PUT /api/grupos/:id/miembros</div>
+          <div class="endpoint">GET /api/grupos/:id/historial</div>
           <div class="endpoint">GET /init-db</div>
+          <div class="endpoint">GET /reset-db</div>
           <div class="endpoint">GET /test-db</div>
         </div>
       </body>
@@ -60,7 +65,7 @@ app.get('/', (req, res) => {
   `);
 });
 
-// Ruta para inicializar la base de datos manualmente
+// Ruta para inicializar la base de datos
 app.get('/init-db', async (req, res) => {
   try {
     console.log('Inicialización de base de datos solicitada manualmente');
@@ -89,6 +94,35 @@ app.get('/init-db', async (req, res) => {
   }
 });
 
+// Ruta para reiniciar completamente la base de datos
+app.get('/reset-db', async (req, res) => {
+  try {
+    console.log('Reinicio completo de base de datos solicitado manualmente');
+    const result = await db.resetDatabase();
+    
+    if (result) {
+      res.status(200).json({
+        success: true,
+        message: 'Base de datos reiniciada correctamente',
+        timestamp: new Date().toISOString()
+      });
+    } else {
+      res.status(500).json({
+        success: false,
+        message: 'Error al reiniciar la base de datos',
+        timestamp: new Date().toISOString()
+      });
+    }
+  } catch (error) {
+    console.error('Error en endpoint reset-db:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error: ' + error.message,
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
 // Ruta para probar la conexión a la base de datos
 app.get('/test-db', async (req, res) => {
   try {
@@ -97,13 +131,13 @@ app.get('/test-db', async (req, res) => {
     if (isConnected) {
       res.status(200).json({
         success: true,
-        message: 'Conexión a la base de datos establecida correctamente',
+        message: 'Conexión a PostgreSQL establecida correctamente',
         timestamp: new Date().toISOString()
       });
     } else {
       res.status(500).json({
         success: false,
-        message: 'No se pudo conectar a la base de datos',
+        message: 'No se pudo conectar a PostgreSQL',
         timestamp: new Date().toISOString()
       });
     }
@@ -122,7 +156,8 @@ app.get('/api/status', (req, res) => {
   res.json({
     status: 'online',
     timestamp: new Date().toISOString(),
-    environment: process.env.NODE_ENV || 'development'
+    environment: process.env.NODE_ENV || 'development',
+    database: 'PostgreSQL'
   });
 });
 
@@ -151,9 +186,9 @@ app.post('/api/cursos', async (req, res) => {
       });
     }
     
-    // Verificar si ya existe un curso con ese nombre
+    // Verificar si ya existe un curso con ese nombre (PostgreSQL usa ILIKE para búsqueda insensible a mayúsculas/minúsculas)
     const cursosExistentes = await db.query(
-      'SELECT * FROM cursos WHERE nombre = ?',
+      'SELECT * FROM cursos WHERE nombre ILIKE $1',
       [nombre]
     );
     
@@ -165,16 +200,10 @@ app.post('/api/cursos', async (req, res) => {
       });
     }
     
-    // Insertar el nuevo curso
-    const result = await db.query(
-      'INSERT INTO cursos (nombre) VALUES (?)',
-      [nombre]
-    );
-    
-    // Obtener el curso recién creado
+    // Insertar el nuevo curso y devolver los datos insertados
     const nuevoCurso = await db.query(
-      'SELECT * FROM cursos WHERE id = ?',
-      [result.insertId]
+      'INSERT INTO cursos (nombre) VALUES ($1) RETURNING *',
+      [nombre]
     );
     
     res.status(201).json({
@@ -223,7 +252,7 @@ app.post('/api/grupos', async (req, res) => {
     
     // Verificar si el curso existe
     const cursos = await db.query(
-      'SELECT * FROM cursos WHERE id = ?',
+      'SELECT * FROM cursos WHERE id = $1',
       [cursoId]
     );
     
@@ -237,28 +266,22 @@ app.post('/api/grupos', async (req, res) => {
     const curso = cursos[0];
     
     // Usar transacción para garantizar la consistencia de los datos
-    const resultado = await db.transaction(async (connection) => {
-      // Insertar el grupo
-      const [resultGrupo] = await connection.execute(
-        'INSERT INTO grupos (nombre, cursoId, curso, miembrosActuales) VALUES (?, ?, ?, ?)',
+    const resultado = await db.transaction(async (client) => {
+      // Insertar el grupo y devolver los datos insertados
+      const resultGrupo = await client.query(
+        'INSERT INTO grupos (nombre, cursoId, curso, miembrosActuales) VALUES ($1, $2, $3, $4) RETURNING *',
         [nombre, cursoId, curso.nombre, miembrosActuales]
       );
       
-      const grupoId = resultGrupo.insertId;
+      const nuevoGrupo = resultGrupo.rows[0];
       
       // Insertar el registro en el historial
-      await connection.execute(
-        'INSERT INTO historial_grupos (grupoId, miembros, observaciones) VALUES (?, ?, ?)',
-        [grupoId, miembrosActuales, observacion]
+      await client.query(
+        'INSERT INTO historial_grupos (grupoId, miembros, observaciones) VALUES ($1, $2, $3)',
+        [nuevoGrupo.id, miembrosActuales, observacion]
       );
       
-      // Obtener el grupo recién creado
-      const [grupos] = await connection.execute(
-        'SELECT * FROM grupos WHERE id = ?',
-        [grupoId]
-      );
-      
-      return grupos[0];
+      return nuevoGrupo;
     });
     
     res.status(201).json({
@@ -289,30 +312,24 @@ app.put('/api/grupos/:id/miembros', async (req, res) => {
     }
     
     // Usar transacción para garantizar la consistencia de los datos
-    const resultado = await db.transaction(async (connection) => {
+    const resultado = await db.transaction(async (client) => {
       // Actualizar el grupo
-      await connection.execute(
-        'UPDATE grupos SET miembrosActuales = ? WHERE id = ?',
+      const resultGrupo = await client.query(
+        'UPDATE grupos SET miembrosActuales = $1 WHERE id = $2 RETURNING *',
         [miembrosActuales, id]
       );
       
-      // Insertar el registro en el historial
-      await connection.execute(
-        'INSERT INTO historial_grupos (grupoId, miembros, observaciones) VALUES (?, ?, ?)',
-        [id, miembrosActuales, observacion]
-      );
-      
-      // Obtener el grupo actualizado
-      const [grupos] = await connection.execute(
-        'SELECT * FROM grupos WHERE id = ?',
-        [id]
-      );
-      
-      if (grupos.length === 0) {
+      if (resultGrupo.rows.length === 0) {
         throw new Error('Grupo no encontrado');
       }
       
-      return grupos[0];
+      // Insertar el registro en el historial
+      await client.query(
+        'INSERT INTO historial_grupos (grupoId, miembros, observaciones) VALUES ($1, $2, $3)',
+        [id, miembrosActuales, observacion]
+      );
+      
+      return resultGrupo.rows[0];
     });
     
     res.json({
@@ -336,7 +353,7 @@ app.get('/api/grupos/:id/historial', async (req, res) => {
     
     // Verificar que el grupo existe
     const grupos = await db.query(
-      'SELECT * FROM grupos WHERE id = ?',
+      'SELECT * FROM grupos WHERE id = $1',
       [id]
     );
     
@@ -349,7 +366,7 @@ app.get('/api/grupos/:id/historial', async (req, res) => {
     
     // Obtener el historial
     const historial = await db.query(
-      'SELECT * FROM historial_grupos WHERE grupoId = ? ORDER BY fecha DESC',
+      'SELECT * FROM historial_grupos WHERE grupoId = $1 ORDER BY fecha DESC',
       [id]
     );
     
@@ -386,12 +403,12 @@ app.listen(PORT, '0.0.0.0', async () => {
     const isConnected = await db.testConnection();
     
     if (isConnected) {
-      console.log('✅ Conexión inicial a la base de datos exitosa');
+      console.log('✅ Conexión inicial a PostgreSQL exitosa');
       
       // Inicializar la base de datos (crear tablas)
       await db.initializeDatabase();
     } else {
-      console.error('❌ No se pudo establecer la conexión inicial a la base de datos');
+      console.error('❌ No se pudo establecer la conexión inicial a PostgreSQL');
       console.log('🔄 Puedes intentar inicializar manualmente visitando /init-db');
     }
   } catch (error) {
